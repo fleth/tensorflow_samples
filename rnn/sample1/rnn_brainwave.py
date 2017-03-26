@@ -37,7 +37,8 @@ def make_mini_batch(train_data, size_of_mini_batch, length_of_sequences, size_of
 
 def make_prediction_initial(train_data, index, length_of_sequences):
     inputs = train_data["inputs"][index:index + length_of_sequences]
-    return np.array(inputs)
+    outputs = train_data["outputs"][index:index + length_of_sequences]
+    return np.array(inputs), np.array(outputs[-1])
 
 
 
@@ -46,9 +47,9 @@ train_data_path             = "../data/train_data/normal.npy"
 num_of_input_nodes          = 1
 num_of_hidden_nodes         = 2
 num_of_output_nodes         = 1
-length_of_sequences         = 10
-num_of_training_epochs      = 10000
-length_of_initial_sequences = 10
+length_of_sequences         = 5
+num_of_training_epochs      = 5000
+length_of_initial_sequences = 5
 num_of_prediction_epochs    = 100
 size_of_mini_batch          = 100
 size_of_input_data          = 50
@@ -87,10 +88,15 @@ with tf.Graph().as_default():
     istate_ph     = tf.placeholder(tf.float32, [None, num_of_hidden_nodes * 2], name="istate") # 1セルあたり2つの値を必要とする。
 
     with tf.name_scope("inference") as scope:
-        weight1_var = tf.Variable(tf.truncated_normal([num_of_input_nodes, num_of_hidden_nodes], stddev=0.1), name="weight1")
+        weight1_var = tf.Variable(tf.truncated_normal([num_of_input_nodes, num_of_hidden_nodes], stddev=1.0), name="weight1")
         weight2_var = tf.Variable(tf.truncated_normal([num_of_hidden_nodes, num_of_output_nodes], stddev=0.1), name="weight2")
-        bias1_var   = tf.Variable(tf.truncated_normal([num_of_hidden_nodes], stddev=0.1), name="bias1")
+        bias1_var   = tf.Variable(tf.truncated_normal([num_of_hidden_nodes], stddev=1.0), name="bias1")
         bias2_var   = tf.Variable(tf.truncated_normal([num_of_output_nodes], stddev=0.1), name="bias2")
+
+#        weight1_var = tf.Variable(tf.zeros([num_of_input_nodes, num_of_hidden_nodes]), name="weight1")
+#        weight2_var = tf.Variable(tf.zeros([num_of_hidden_nodes, num_of_output_nodes]), name="weight2")
+#        bias1_var   = tf.Variable(tf.zeros([num_of_hidden_nodes]), name="bias1")
+#        bias2_var   = tf.Variable(tf.zeros([num_of_output_nodes]), name="bias2")
 
         in1 = tf.transpose(input_ph, [1, 0, 2, 3])         # (batch, sequence, size, data) -> (sequence, batch, size, data)
         in2 = tf.reshape(in1, [-1, num_of_input_nodes]) # (sequence, batch, data) -> (sequence * batch * size, data)
@@ -114,7 +120,7 @@ with tf.Graph().as_default():
 
     with tf.Session() as sess:
         saver = tf.train.Saver()
-        summary_writer = tf.summary.FileWriter("data", graph=sess.graph)
+        summary_writer = tf.summary.FileWriter("/tmp/tensorflow_log", graph=sess.graph)
         sess.run(init)
 
         for epoch in range(num_of_training_epochs):
@@ -132,7 +138,9 @@ with tf.Graph().as_default():
                 summary_writer.add_summary(summary_str, epoch)
                 print("train#%d, train loss: %e" % (epoch + 1, train_loss))
 
-        inputs  = make_prediction_initial(train_data, 0, length_of_initial_sequences)
+        #=================================================================================
+
+        inputs, supervisors = make_mini_batch(train_data, num_of_prediction_epochs, length_of_sequences, size_of_input_data)
         outputs = np.empty(0)
         states  = np.zeros((num_of_hidden_nodes * 2)),
 
@@ -141,16 +149,15 @@ with tf.Graph().as_default():
 
         for epoch in range(num_of_prediction_epochs):
             pred_dict = {
-                input_ph:  inputs.reshape((1, length_of_sequences, size_of_input_data, 1)),
+                input_ph:  inputs[epoch].reshape((1, length_of_sequences, size_of_input_data, 1)),
                 istate_ph: states,
             }
             output, states = sess.run([output_op, states_op], feed_dict=pred_dict)
             print("prediction#%d, output: %f" % (epoch + 1, output))
 
-            inputs  = np.delete(inputs, 0)
-            inputs  = np.append(inputs, output)
             outputs = np.append(outputs, output)
 
+        print("supervisors:", supervisors)
         print("outputs:", outputs)
         np.save("output.npy", outputs)
 
