@@ -30,9 +30,16 @@ def make_mini_batch(train_data, size_of_mini_batch, length_of_sequences, size_of
         inputs_part    = train_data["inputs"][index:index + length_of_sequences]
         outputs_part    = train_data["outputs"][index:index + length_of_sequences]
         inputs  = np.append(inputs, inputs_part)
-        outputs = np.append(outputs, math.degrees(outputs_part[-1][0]))
+        output = np.zeros(4)
+        degrees = math.degrees(outputs_part[-1][0]) % 360
+        if degrees < 0:
+            output_index = (360 + degrees) // 90
+        else:
+            output_index = degrees // 90
+        output[int(output_index)] = 1.0
+        outputs = np.append(outputs, output)
     inputs  = inputs.reshape(-1, length_of_sequences, size_of_input_data, 1)
-    outputs = outputs.reshape(-1, 1)
+    outputs = outputs.reshape(-1, 4)
     return (inputs, outputs)
 
 def make_prediction_initial(train_data, index, length_of_sequences):
@@ -45,8 +52,8 @@ def make_prediction_initial(train_data, index, length_of_sequences):
 
 train_data_path             = "../data/train_data/normal.npy"
 num_of_input_nodes          = 1
-num_of_hidden_nodes         = 20
-num_of_output_nodes         = 1
+num_of_hidden_nodes         = 50
+num_of_output_nodes         = 4
 length_of_sequences         = 5
 num_of_training_epochs      = 1000
 length_of_initial_sequences = 5
@@ -54,7 +61,7 @@ num_of_prediction_epochs    = 100
 size_of_mini_batch          = 100
 size_of_input_data          = 50
 learning_rate               = 0.1
-forget_bias                 = 1.0
+forget_bias                 = 0.8
 print("train_data_path             = %s" % train_data_path)
 print("num_of_input_nodes          = %d" % num_of_input_nodes)
 print("num_of_hidden_nodes         = %d" % num_of_hidden_nodes)
@@ -89,15 +96,15 @@ with tf.Graph().as_default():
     istate_ph     = tf.placeholder(tf.float32, [None, num_of_hidden_nodes * 2], name="istate") # 1セルあたり2つの値を必要とする。
 
     with tf.name_scope("inference") as scope:
-        weight1_var = tf.Variable(tf.truncated_normal([num_of_input_nodes, num_of_hidden_nodes], stddev=1.0), name="weight1")
-        weight2_var = tf.Variable(tf.truncated_normal([num_of_hidden_nodes, num_of_output_nodes], stddev=0.1), name="weight2")
-        bias1_var   = tf.Variable(tf.truncated_normal([num_of_hidden_nodes], stddev=1.0), name="bias1")
-        bias2_var   = tf.Variable(tf.truncated_normal([num_of_output_nodes], stddev=0.1), name="bias2")
+#        weight1_var = tf.Variable(tf.truncated_normal([num_of_input_nodes, num_of_hidden_nodes], stddev=0.1), name="weight1")
+#        weight2_var = tf.Variable(tf.truncated_normal([num_of_hidden_nodes, num_of_output_nodes], stddev=0.1), name="weight2")
+#        bias1_var   = tf.Variable(tf.truncated_normal([num_of_hidden_nodes], stddev=0.1), name="bias1")
+#        bias2_var   = tf.Variable(tf.truncated_normal([num_of_output_nodes], stddev=0.1), name="bias2")
 
-#        weight1_var = tf.Variable(tf.zeros([num_of_input_nodes, num_of_hidden_nodes]), name="weight1")
-#        weight2_var = tf.Variable(tf.zeros([num_of_hidden_nodes, num_of_output_nodes]), name="weight2")
-#        bias1_var   = tf.Variable(tf.zeros([num_of_hidden_nodes]), name="bias1")
-#        bias2_var   = tf.Variable(tf.zeros([num_of_output_nodes]), name="bias2")
+        weight1_var = tf.Variable(tf.zeros([num_of_input_nodes, num_of_hidden_nodes]), name="weight1")
+        weight2_var = tf.Variable(tf.zeros([num_of_hidden_nodes, num_of_output_nodes]), name="weight2")
+        bias1_var   = tf.Variable(tf.zeros([num_of_hidden_nodes]), name="bias1")
+        bias2_var   = tf.Variable(tf.zeros([num_of_output_nodes]), name="bias2")
 
         in1 = tf.transpose(input_ph, [1, 0, 2, 3])         # (batch, sequence, size, data) -> (sequence, batch, size, data)
         in2 = tf.reshape(in1, [-1, num_of_input_nodes]) # (sequence, batch, data) -> (sequence * batch * size, data)
@@ -109,9 +116,7 @@ with tf.Graph().as_default():
         output_op = tf.matmul(rnn_output[-1], weight2_var) + bias2_var
 
     with tf.name_scope("loss") as scope:
-#        square_error = tf.reduce_mean(tf.square(output_op - supervisor_ph))
-        square_error = tf.reduce_sum(tf.square(output_op - supervisor_ph))
-        loss_op      = square_error
+        loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=output_op, labels=supervisor_ph))
         tf.summary.scalar("loss", loss_op)
 
     with tf.name_scope("training") as scope:
@@ -155,7 +160,7 @@ with tf.Graph().as_default():
                 istate_ph: states,
             }
             output, states = sess.run([output_op, states_op], feed_dict=pred_dict)
-            print("prediction#%d, output: %f" % (epoch + 1, output))
+            print("prediction#%d, output: %s" % (epoch + 1, output))
 
             outputs = np.append(outputs, output)
 
