@@ -39,7 +39,7 @@ def make_mini_batch(train_data, size_of_mini_batch, size_of_input_data):
         if degrees < 0:
             degrees = 360 + degrees
         outputs = np.append(outputs, degrees % 360)
-    inputs = inputs.reshape(-1, 1, size_of_input_data)
+    inputs = inputs.reshape(-1, size_of_input_data, 1)
     return (inputs, outputs)
 
 
@@ -59,18 +59,19 @@ data, labels = make_mini_batch(train_data, size_of_batch, num_of_input_nodes)
 tb_cb = keras.callbacks.TensorBoard(log_dir="/tmp/tensorflow_log", histogram_freq=1)
 callbacks = [tb_cb]
 
-print(data)
-
 # 乱数シードを固定する。
 random.seed(0)
 np.random.seed(0)
 
 model = Sequential()
-model.add(Conv1D(25, 3, padding="same", input_shape=(1, num_of_input_nodes)))
-#model.add(MaxPooling1D(pool_size=2))
+model.add(Conv1D(150, 3, padding="same", input_shape=(num_of_input_nodes, 1)))
+model.add(Activation("relu"))
+model.add(MaxPooling1D())
 model.add(Flatten())
 model.add(Dense(num_of_output_nodes))
 model.compile(optimizer="adam", loss="mean_squared_error")
+
+model.summary()
 
 model.fit(data, labels, nb_epoch=num_of_training_epochs, batch_size=size_of_mini_batch, callbacks=callbacks)
 
