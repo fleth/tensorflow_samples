@@ -60,7 +60,7 @@ for filename in file_list:
 print("brainwaves: %s" % len(brainwaves))
 
 num_of_input_nodes          = 50
-num_of_training_epochs      = 50
+num_of_training_epochs      = 5
 size_of_mini_batch          = 100
 size_of_batch               = 1500
 dropout                     = 0.01
@@ -78,11 +78,11 @@ random.seed(0)
 np.random.seed(0)
 
 model = Sequential()
-model.add(Conv1D(32, 3, padding="same", input_shape=(num_of_input_nodes, 1)))
-model.add(Conv1D(64, 3, padding="same"))
+model.add(Conv1D(64, 3, padding="same", input_shape=(num_of_input_nodes, 1)))
+model.add(Conv1D(128, 3, padding="same"))
 model.add(MaxPooling1D())
 model.add(Flatten())
-model.add(Dense(128))
+model.add(Dense(128, activation="relu"))
 model.add(Dense(1, activation="relu"))
 model.compile(optimizer="adam", loss="mean_squared_error", metrics=["accuracy"])
 
