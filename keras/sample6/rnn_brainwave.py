@@ -30,9 +30,9 @@ def make_data(train_data, size_of_mini_batch, size_of_input_data, concat):
     base    = 5000
     for index in range(size_of_mini_batch):
         i = base + index
-        inputs_part    = train_data["inputs"][i:i+concat]
-        outputs_part    = train_data["outputs"][i+concat]
-        inputs  = np.vstack((inputs, inputs_part.reshape(-1)))
+        inputs_part    = train_data["inputs"][i]
+        outputs_part    = train_data["outputs"][i]
+        inputs  = np.append(inputs, inputs_part)
         outputs = np.append(outputs, int(degrees(outputs_part[0])))
     inputs = inputs.reshape(-1, size_of_input_data * concat, 1)
     print(outputs[0])
@@ -53,11 +53,20 @@ def make_rand_data(num_of_samples, data, labels):
     print("rand_data: %s, rand_labels: %s" % (rand_data.shape, rand_labels.shape))
     return (rand_data, rand_labels)
 
+concat                      = 2
+num_of_input_nodes          = 50
+num_of_output_nodes         = 360
+num_of_training_epochs      = 50
+size_of_mini_batch          = 100
+size_of_batch               = 500
+
 keys = []
 brainwaves = []
 mouse = dict()
 mouse["move"] = []
 mouse["button"] = []
+concat_data = np.empty(0)
+
 
 file_list = [
     "../data/20170203_223600.json",
@@ -74,10 +83,13 @@ for filename in file_list:
     inputs = (loaddata(filename))
     for line in inputs:
         data = json.loads(line)
+        concat_data = np.append(concat_data, data["brainwaves"])
+        if(len(concat_data) > num_of_input_nodes * concat):
+            concat_data = concat_data[num_of_input_nodes:len(concat_data)]
         # ignore zero
-        if int(data["mouse"]["move"][0]) == 0:
+        if int(data["mouse"]["move"][0]) == 0 or len(concat_data) < num_of_input_nodes * concat:
             continue
-        brainwaves.append(data["brainwaves"])
+        brainwaves.append(concat_data)
         keys.append(data["keys"])
         mouse["move"].append(data["mouse"]["move"])
         mouse["button"].append(data["mouse"]["button"])
@@ -89,13 +101,6 @@ mouse["button"] = np.asarray(mouse["button"])
 
 print("brainwaves: %s" % len(brainwaves))
 print("channel first: %s" % K.image_data_format())
-
-concat                      = 2
-num_of_input_nodes          = 50
-num_of_output_nodes         = 360
-num_of_training_epochs      = 50
-size_of_mini_batch          = 100
-size_of_batch               = 500
 
 train_data = dict()
 train_data["inputs"] = brainwaves
