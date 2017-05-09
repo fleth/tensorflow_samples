@@ -9,6 +9,7 @@ from keras.models import Sequential
 from keras.layers import *
 from keras.models import Model
 from keras.callbacks import EarlyStopping
+from keras import backend as K
 
 # create data
 def loaddata(filename):
@@ -23,28 +24,29 @@ def degrees(data):
         degrees = 360 + degrees
     return degrees % 360
 
-def make_data(train_data, size_of_mini_batch, size_of_input_data):
-    inputs  = np.empty(0)
-    outputs = np.empty(0)
+def make_data(train_data, size_of_mini_batch, size_of_input_data, concat):
+    inputs  = np.empty((0, size_of_input_data * concat))
+    outputs = np.empty((0, 360))
     base    = 5000
     for index in range(size_of_mini_batch):
-        inputs_part    = train_data["inputs"][base + index]
-        outputs_part    = train_data["outputs"][base + index]
-        inputs  = np.append(inputs, inputs_part)
+        i = base + index
+        inputs_part    = train_data["inputs"][i:i+concat]
+        outputs_part    = train_data["outputs"][i+concat]
+        inputs  = np.vstack((inputs, inputs_part.reshape(-1)))
         tmp = np.zeros(360)
         tmp[int(degrees(outputs_part[0]))] = 1
-        outputs = np.append(outputs, tmp)
-    inputs = inputs.reshape(-1, size_of_input_data, 1)
-    outputs = outputs.reshape(-1, 360)
+        outputs = np.vstack((outputs, tmp))
+    inputs = inputs.reshape(-1, size_of_input_data * concat, 1)
     return (inputs, outputs)
 
 def make_rand_data(num_of_samples, data, labels):
-    rand_data   = np.empty(0)
-    rand_labels = np.empty(0)
+    rand_data   = np.empty((0, 1))
+    rand_labels = np.empty((0, len(labels[0])))
+    print("%s, %s, %s" % (rand_data.shape, rand_labels.shape, data[0].shape))
     for _ in range(num_of_samples):
         index   = random.randint(0, len(data))
-        rand_data   = np.append(rand_data, data[index])
-        rand_labels = np.append(rand_labels, labels[index])
+        rand_data   = np.vstack((rand_data, data[index]))
+        rand_labels = np.vstack((rand_labels, labels[index]))
     rand_data = rand_data.reshape(num_of_samples, -1, 1)
     return (rand_data, rand_labels)
 
@@ -77,21 +79,28 @@ for filename in file_list:
         mouse["move"].append(data["mouse"]["move"])
         mouse["button"].append(data["mouse"]["button"])
 
-print("brainwaves: %s" % len(brainwaves))
+brainwaves      = np.asarray(brainwaves)
+keys            = np.asarray(keys)
+mouse["move"]   = np.asarray(mouse["move"])
+mouse["button"] = np.asarray(mouse["button"])
 
+print("brainwaves: %s" % len(brainwaves))
+print("channel first: %s" % K.image_data_format())
+
+concat                      = 4
 num_of_input_nodes          = 50
 num_of_output_nodes         = 360
-num_of_training_epochs      = 200
+num_of_training_epochs      = 5
 size_of_mini_batch          = 100
-size_of_batch               = 5000
+size_of_batch               = 500
 dropout                     = 0.01
 
 train_data = dict()
 train_data["inputs"] = brainwaves
 train_data["outputs"] = mouse["move"]
 
-data, labels = make_data(train_data, size_of_batch, num_of_input_nodes)
-print(labels)
+data, labels = make_data(train_data, size_of_batch, num_of_input_nodes, concat)
+print("%s, %s" % (data.shape, labels.shape))
 tb_cb = keras.callbacks.TensorBoard(log_dir="/tmp/tensorflow_log", histogram_freq=1)
 callbacks = [tb_cb]
 
@@ -100,15 +109,16 @@ random.seed(0)
 np.random.seed(0)
 
 model = Sequential()
-model.add(Conv1D(128, 3, padding="same", input_shape=(num_of_input_nodes, 1)))
-model.add(Conv1D(128, 3, padding="same", activation="relu"))
+model.add(Conv1D(32, 3, padding="same", input_shape=(num_of_input_nodes * concat, 1)))
+model.add(Conv1D(64, 3, padding="same", activation="relu"))
 model.add(MaxPooling1D())
+model.add(Dropout(0.25))
 model.add(Flatten())
 #model.add(LSTM(64))
 model.add(Dense(128, activation="relu"))
+model.add(Dropout(0.5))
 model.add(Dense(num_of_output_nodes, activation="softmax"))
-optimizer   = "adadelta"
-model.compile(optimizer=optimizer, loss="categorical_crossentropy", metrics=["accuracy"])
+model.compile(optimizer=keras.optimizers.Adadelta(), loss="categorical_crossentropy", metrics=["accuracy"])
 
 model.summary()
 
@@ -118,5 +128,5 @@ test_data, test_labels = make_rand_data(20, data, labels)
 print("%s, %s, %s, %s" % (data.shape, labels.shape, test_data.shape, test_labels.shape))
 predict = model.predict(test_data, batch_size=size_of_mini_batch)
 
-print(predict)
-print(test_labels)
+print("predict: %s" % predict)
+print("test_labels: %s" % test_labels)
